@@ -18,7 +18,8 @@ def ask_ai(prompt_text):
     """دالة إرسال الطلب لموديل Llama 3.3 عبر Groq"""
     response = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt_text}],
-        model="llama-3.3-70b-versatile",
+        model="llama-3.1-8b-instant",
+
     )
     return response.choices[0].message.content
 
