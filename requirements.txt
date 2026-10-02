@@ -1,3 +1,3 @@
-python-telegram-bot
-PyMuPDF
-groq
+python-telegram-bot>=22.0
+google-genai>=1.0.0
+PyMuPDF>=1.24.0
