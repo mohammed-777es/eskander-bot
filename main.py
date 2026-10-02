@@ -443,16 +443,11 @@ async def button_handler(
                     os.remove(pdf_path)
 
         except Exception as e:
-
-            print(
-                "SUMMARY ERROR:",
-                e
-            )
-
-            await query.message.reply_text(
-                "❌ حدث خطأ أثناء إنشاء الملخص.\n"
-                "يرجى المحاولة مرة أخرى."
-            )
+    print(f"SUMMARY ERROR: {type(e).__name__}: {e}")
+    await query.message.reply_text(
+        "❌ حدث خطأ أثناء إنشاء الملخص.\n\n"
+        "راجع Render Logs لمعرفة السبب."
+    )
 
 
     # =====================
