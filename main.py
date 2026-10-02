@@ -1,14 +1,18 @@
 import os
 import json
-import fitz  # PyMuPDF
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
+import fitz
 from google import genai
+
 from telegram import (
     Update,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     Poll
 )
+
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -19,9 +23,9 @@ from telegram.ext import (
 )
 
 
-# =========================================================
+# =========================
 # ENVIRONMENT VARIABLES
-# =========================================================
+# =========================
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
@@ -33,18 +37,18 @@ if not GEMINI_API_KEY:
     raise ValueError("GEMINI_API_KEY is missing")
 
 
-# =========================================================
+# =========================
 # GEMINI
-# =========================================================
+# =========================
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
 GEMINI_MODEL = "gemini-2.5-flash"
 
 
-# =========================================================
+# =========================
 # BRAND
-# =========================================================
+# =========================
 
 FOOTER_SIGNATURE = (
     "\n\n"
@@ -54,11 +58,44 @@ FOOTER_SIGNATURE = (
 )
 
 
-# =========================================================
-# /START
-# =========================================================
+# =========================
+# RENDER HEALTH SERVER
+# =========================
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+class HealthHandler(BaseHTTPRequestHandler):
+
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(
+            b"Eskander AI Studio is running!"
+        )
+
+    def log_message(self, format, *args):
+        return
+
+
+def start_health_server():
+    port = int(os.environ.get("PORT", 10000))
+
+    server = HTTPServer(
+        ("0.0.0.0", port),
+        HealthHandler
+    )
+
+    print(f"🌐 Health server running on port {port}")
+
+    server.serve_forever()
+
+
+# =========================
+# START COMMAND
+# =========================
+
+async def start(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
 
     welcome_text = (
         "✨ <b>مرحباً بك في Eskander AI Studio!</b> ✨\n\n"
@@ -94,11 +131,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "📸 متابعة على إنستغرام",
                 url="https://instagram.com/3men.1"
             ),
+
             InlineKeyboardButton(
                 "💬 التواصل مع المطور",
                 url="https://t.me/3men_1"
             )
         ],
+
         [
             InlineKeyboardButton(
                 "🚀 بدء استخدام البوت",
@@ -116,9 +155,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# =========================================================
+# =========================
 # BUTTON HANDLER
-# =========================================================
+# =========================
 
 async def button_handler(
     update: Update,
@@ -126,20 +165,26 @@ async def button_handler(
 ):
 
     query = update.callback_query
+
     await query.answer()
 
-    # -----------------------------------------------------
+
+    # =====================
     # START SERVICES
-    # -----------------------------------------------------
+    # =====================
 
     if query.data == "go_to_services":
 
         instructions = (
             "📚 <b>جاهز لبدء معالجة المحاضرة!</b>\n\n"
+
             "📄 أرسل ملف المحاضرة بصيغة PDF الآن.\n\n"
+
             "بعد استلام الملف سأقوم بقراءته واستخراج محتواه، "
             "ثم ستظهر لك الخدمات المتاحة.\n\n"
+
             "اختر الخدمة التي تريدها من القائمة."
+
             f"{FOOTER_SIGNATURE}"
         )
 
@@ -148,9 +193,10 @@ async def button_handler(
             parse_mode="HTML"
         )
 
-    # -----------------------------------------------------
+
+    # =====================
     # SUMMARY
-    # -----------------------------------------------------
+    # =====================
 
     elif query.data.startswith("summary_"):
 
@@ -164,7 +210,10 @@ async def button_handler(
             f"⏳ جاري إنشاء ملخص المحاضرة باللغة {lang}..."
         )
 
-        pdf_text = context.user_data.get("pdf_text", "")
+        pdf_text = context.user_data.get(
+            "pdf_text",
+            ""
+        )
 
         if not pdf_text:
 
@@ -174,7 +223,9 @@ async def button_handler(
                 f"{FOOTER_SIGNATURE}",
                 parse_mode="HTML"
             )
+
             return
+
 
         prompt = f"""
 أنت مساعد أكاديمي متخصص.
@@ -182,6 +233,7 @@ async def button_handler(
 قم بتلخيص المحاضرة التالية باللغة {lang}.
 
 الشروط:
+
 - حافظ على المعلومات المهمة.
 - لا تخترع معلومات غير موجودة في المحاضرة.
 - استخدم عناوين واضحة.
@@ -223,9 +275,10 @@ async def button_handler(
                 parse_mode="HTML"
             )
 
-    # -----------------------------------------------------
+
+    # =====================
     # QUIZ
-    # -----------------------------------------------------
+    # =====================
 
     elif query.data == "quiz":
 
@@ -233,7 +286,10 @@ async def button_handler(
             "⏳ جاري إنشاء سؤال تفاعلي من المحاضرة..."
         )
 
-        pdf_text = context.user_data.get("pdf_text", "")
+        pdf_text = context.user_data.get(
+            "pdf_text",
+            ""
+        )
 
         if not pdf_text:
 
@@ -241,7 +297,9 @@ async def button_handler(
                 "❌ لم أجد محتوى المحاضرة.\n"
                 "يرجى إرسال ملف PDF من جديد."
             )
+
             return
+
 
         prompt = f"""
 اقرأ المحاضرة التالية وأنشئ سؤال اختيار من متعدد واحد فقط.
@@ -263,6 +321,7 @@ async def button_handler(
 }}
 
 الشروط:
+
 - السؤال يجب أن يكون من محتوى المحاضرة.
 - أربعة خيارات فقط.
 - correct_index يبدأ من 0.
@@ -292,11 +351,19 @@ async def button_handler(
 
             await context.bot.send_poll(
                 chat_id=query.message.chat_id,
+
                 question=data["question"],
+
                 options=data["options"],
+
                 type=Poll.QUIZ,
-                correct_option_id=int(data["correct_index"]),
+
+                correct_option_id=int(
+                    data["correct_index"]
+                ),
+
                 explanation=data["explanation"],
+
                 is_anonymous=False
             )
 
@@ -317,9 +384,10 @@ async def button_handler(
                 parse_mode="HTML"
             )
 
-    # -----------------------------------------------------
+
+    # =====================
     # TRANSLATION
-    # -----------------------------------------------------
+    # =====================
 
     elif query.data == "translate":
 
@@ -327,7 +395,10 @@ async def button_handler(
             "⏳ جاري ترجمة محتوى المحاضرة..."
         )
 
-        pdf_text = context.user_data.get("pdf_text", "")
+        pdf_text = context.user_data.get(
+            "pdf_text",
+            ""
+        )
 
         if not pdf_text:
 
@@ -335,7 +406,9 @@ async def button_handler(
                 "❌ لم أجد محتوى المحاضرة.\n"
                 "يرجى إرسال ملف PDF من جديد."
             )
+
             return
+
 
         prompt = f"""
 أنت مترجم أكاديمي.
@@ -343,6 +416,7 @@ async def button_handler(
 ترجم محتوى المحاضرة التالية إلى اللغة العربية.
 
 الشروط:
+
 - ترجمة دقيقة وواضحة.
 - حافظ على المصطلحات الأكاديمية.
 - لا تضف معلومات من خارج النص.
@@ -384,9 +458,9 @@ async def button_handler(
             )
 
 
-# =========================================================
+# =========================
 # PDF HANDLER
-# =========================================================
+# =========================
 
 async def handle_document(
     update: Update,
@@ -394,6 +468,7 @@ async def handle_document(
 ):
 
     document = update.message.document
+
 
     if not document.file_name.lower().endswith(".pdf"):
 
@@ -405,11 +480,16 @@ async def handle_document(
 
         return
 
+
     status_msg = await update.message.reply_text(
         "📥 جاري استقبال ملف المحاضرة..."
     )
 
-    pdf_path = f"temp_{document.file_unique_id}.pdf"
+
+    pdf_path = (
+        f"temp_{document.file_unique_id}.pdf"
+    )
+
 
     try:
 
@@ -417,20 +497,30 @@ async def handle_document(
             document.file_id
         )
 
-        await file.download_to_drive(pdf_path)
+        await file.download_to_drive(
+            pdf_path
+        )
+
 
         await status_msg.edit_text(
             "📖 جاري قراءة وتحليل محتوى المحاضرة..."
         )
 
+
         doc = fitz.open(pdf_path)
+
+        page_count = len(doc)
 
         extracted_text = ""
 
+
         for page in doc:
+
             extracted_text += page.get_text()
 
+
         doc.close()
+
 
         if not extracted_text.strip():
 
@@ -441,42 +531,67 @@ async def handle_document(
 
             return
 
+
         context.user_data["pdf_text"] = extracted_text
 
+
         keyboard = [
+
             [
+
                 InlineKeyboardButton(
                     "📝 تلخيص بالعربي",
                     callback_data="summary_ar"
                 ),
+
                 InlineKeyboardButton(
                     "📝 Summary English",
                     callback_data="summary_en"
                 )
+
             ],
+
             [
+
                 InlineKeyboardButton(
                     "❓ اختبار تفاعلي",
                     callback_data="quiz"
                 ),
+
                 InlineKeyboardButton(
                     "🌐 ترجمة المحاضرة",
                     callback_data="translate"
                 )
+
             ]
+
         ]
 
-        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        reply_markup = InlineKeyboardMarkup(
+            keyboard
+        )
+
 
         await status_msg.edit_text(
+
             "✅ <b>تم استقبال المحاضرة بنجاح!</b>\n\n"
-            f"📄 <b>اسم الملف:</b> {document.file_name}\n"
-            f"📑 <b>عدد الصفحات:</b> {len(doc)}\n\n"
+
+            f"📄 <b>اسم الملف:</b> "
+            f"{document.file_name}\n"
+
+            f"📑 <b>عدد الصفحات:</b> "
+            f"{page_count}\n\n"
+
             "🎯 <b>اختر الخدمة المطلوبة:</b>"
+
             f"{FOOTER_SIGNATURE}",
+
             reply_markup=reply_markup,
+
             parse_mode="HTML"
         )
+
 
     except Exception as e:
 
@@ -489,31 +604,49 @@ async def handle_document(
             parse_mode="HTML"
         )
 
+
     finally:
 
         if os.path.exists(pdf_path):
+
             os.remove(pdf_path)
 
 
-# =========================================================
+# =========================
 # ERROR HANDLER
-# =========================================================
+# =========================
 
 async def error_handler(
     update: object,
     context: ContextTypes.DEFAULT_TYPE
 ):
 
-    print("BOT ERROR:", context.error)
+    print(
+        "BOT ERROR:",
+        context.error
+    )
 
 
-# =========================================================
-# RUN BOT
-# =========================================================
+# =========================
+# MAIN
+# =========================
 
 def main():
 
-    print("⚡ Starting Eskander AI Studio...")
+    print(
+        "⚡ Starting Eskander AI Studio..."
+    )
+
+
+    # Start HTTP server for Render
+
+    threading.Thread(
+        target=start_health_server,
+        daemon=True
+    ).start()
+
+
+    # Telegram bot
 
     app = (
         ApplicationBuilder()
@@ -521,13 +654,21 @@ def main():
         .build()
     )
 
-    app.add_handler(
-        CommandHandler("start", start)
-    )
 
     app.add_handler(
-        CallbackQueryHandler(button_handler)
+        CommandHandler(
+            "start",
+            start
+        )
     )
+
+
+    app.add_handler(
+        CallbackQueryHandler(
+            button_handler
+        )
+    )
+
 
     app.add_handler(
         MessageHandler(
@@ -536,12 +677,24 @@ def main():
         )
     )
 
-    app.add_error_handler(error_handler)
 
-    print("✅ Bot is running...")
+    app.add_error_handler(
+        error_handler
+    )
+
+
+    print(
+        "✅ Bot is running..."
+    )
+
 
     app.run_polling()
 
 
+# =========================
+# RUN
+# =========================
+
 if __name__ == "__main__":
+
     main()
